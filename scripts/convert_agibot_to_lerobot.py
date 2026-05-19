@@ -29,7 +29,6 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-
 # ============================================================
 # LeRobot V1 parquet schema constants
 # ============================================================
@@ -62,34 +61,54 @@ ARROW_SCHEMA_HUGGINGFACE_METADATA = {
 # ============================================================
 
 # State vector: 159 dimensions
-STATE_LEFT_EFFECTOR_POS = 0       # 1 dim
-STATE_RIGHT_EFFECTOR_POS = 1      # 1 dim
-STATE_END_POSITION = 2            # 6 dims (2 arms x 3)
-STATE_END_ORIENTATION = 8         # 8 dims (2 arms x 4)
-STATE_END_ARM_ORIENTATION = 16    # 8 dims (2 arms x 4)
-STATE_END_ARM_POSITION = 24        # 6 dims (2 arms x 3)
-STATE_JOINT_POSITION = 30         # 14 dims
-STATE_JOINT_EFFORT = 44           # 14 dims
-STATE_JOINT_VELOCITY = 58         # 14 dims
-STATE_HEAD_POSITION = 72          # 3 dims
-STATE_WAIST_POSITION = 75         # 5 dims
-STATE_ROBOT_POSITION = 80         # 3 dims
-STATE_ROBOT_ORIENTATION = 83      # 4 dims
+STATE_LEFT_EFFECTOR_POS = 0  # 1 dim
+STATE_RIGHT_EFFECTOR_POS = 1  # 1 dim
+STATE_END_POSITION = 2  # 6 dims (2 arms x 3)
+STATE_END_ORIENTATION = 8  # 8 dims (2 arms x 4)
+STATE_END_ARM_ORIENTATION = 16  # 8 dims (2 arms x 4)
+STATE_END_ARM_POSITION = 24  # 6 dims (2 arms x 3)
+STATE_JOINT_POSITION = 30  # 14 dims
+STATE_JOINT_EFFORT = 44  # 14 dims
+STATE_JOINT_VELOCITY = 58  # 14 dims
+STATE_HEAD_POSITION = 72  # 3 dims
+STATE_WAIST_POSITION = 75  # 5 dims
+STATE_ROBOT_POSITION = 80  # 3 dims
+STATE_ROBOT_ORIENTATION = 83  # 4 dims
 
 # Action vector: 40 dimensions
-ACTION_LEFT_EFFECTOR = 0          # 1 dim
-ACTION_RIGHT_EFFECTOR = 1          # 1 dim
-ACTION_END_POSITION = 2            # 6 dims
-ACTION_END_ORIENTATION = 8        # 8 dims
-ACTION_JOINT_POSITION = 16        # 14 dims
-ACTION_HEAD_POSITION = 30         # 3 dims
-ACTION_WAIST_POSITION = 33         # 5 dims
-ACTION_ROBOT_VELOCITY = 38        # 2 dims
+ACTION_LEFT_EFFECTOR = 0  # 1 dim
+ACTION_RIGHT_EFFECTOR = 1  # 1 dim
+ACTION_END_POSITION = 2  # 6 dims
+ACTION_END_ORIENTATION = 8  # 8 dims
+ACTION_JOINT_POSITION = 16  # 14 dims
+ACTION_HEAD_POSITION = 30  # 3 dims
+ACTION_WAIST_POSITION = 33  # 5 dims
+ACTION_ROBOT_VELOCITY = 38  # 2 dims
 
 
 # ============================================================
 # Core data building functions
 # ============================================================
+
+
+def read_extrinsic_entry(entry: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Read rotation and translation from supported AgiBot extrinsic schemas."""
+    if "extrinsic" in entry:
+        entry = entry["extrinsic"]
+
+    rotation = entry.get("rotation")
+    if rotation is None:
+        rotation = entry.get("rotation_matrix")
+
+    translation = entry.get("translation")
+    if translation is None:
+        translation = entry.get("translation_vector")
+
+    if rotation is None or translation is None:
+        raise KeyError(f"Unsupported extrinsic entry keys: {sorted(entry.keys())}")
+
+    return np.array(rotation, dtype=np.float32), np.array(translation, dtype=np.float32)
+
 
 def build_state(state_dict: dict, joint_all_dict: dict, extrinsic_data: dict, frame_idx: int = 0) -> np.ndarray:
     """Build 159-dim state vector from agibot state data."""
@@ -102,35 +121,35 @@ def build_state(state_dict: dict, joint_all_dict: dict, extrinsic_data: dict, fr
     eo = state_dict["end"]["orientation"]
     eao = state_dict["end"]["arm_orientation"]
     eap = state_dict["end"]["arm_position"]
-    state[STATE_END_POSITION:STATE_END_POSITION + 6] = ep.flatten()
-    state[STATE_END_ORIENTATION:STATE_END_ORIENTATION + 8] = eo.flatten()
-    state[STATE_END_ARM_ORIENTATION:STATE_END_ARM_ORIENTATION + 8] = eao.flatten()
-    state[STATE_END_ARM_POSITION:STATE_END_ARM_POSITION + 6] = eap.flatten()
+    state[STATE_END_POSITION : STATE_END_POSITION + 6] = ep.flatten()
+    state[STATE_END_ORIENTATION : STATE_END_ORIENTATION + 8] = eo.flatten()
+    state[STATE_END_ARM_ORIENTATION : STATE_END_ARM_ORIENTATION + 8] = eao.flatten()
+    state[STATE_END_ARM_POSITION : STATE_END_ARM_POSITION + 6] = eap.flatten()
 
-    state[STATE_JOINT_POSITION:STATE_JOINT_POSITION + 14] = joint_all_dict["joint"]["position"][:14]
-    state[STATE_JOINT_EFFORT:STATE_JOINT_EFFORT + 14] = joint_all_dict["joint"]["effort"][:14]
-    state[STATE_JOINT_VELOCITY:STATE_JOINT_VELOCITY + 14] = joint_all_dict["joint"]["velocity"][:14]
+    state[STATE_JOINT_POSITION : STATE_JOINT_POSITION + 14] = joint_all_dict["joint"]["position"][:14]
+    state[STATE_JOINT_EFFORT : STATE_JOINT_EFFORT + 14] = joint_all_dict["joint"]["effort"][:14]
+    state[STATE_JOINT_VELOCITY : STATE_JOINT_VELOCITY + 14] = joint_all_dict["joint"]["velocity"][:14]
 
-    state[STATE_HEAD_POSITION:STATE_HEAD_POSITION + 3] = state_dict["head"]["position"]
-    state[STATE_WAIST_POSITION:STATE_WAIST_POSITION + 5] = state_dict["waist"]["position"]
-    state[STATE_ROBOT_POSITION:STATE_ROBOT_POSITION + 3] = state_dict["robot"]["position"]
-    state[STATE_ROBOT_ORIENTATION:STATE_ROBOT_ORIENTATION + 4] = state_dict["robot"]["orientation"]
+    state[STATE_HEAD_POSITION : STATE_HEAD_POSITION + 3] = state_dict["head"]["position"]
+    state[STATE_WAIST_POSITION : STATE_WAIST_POSITION + 5] = state_dict["waist"]["position"]
+    state[STATE_ROBOT_POSITION : STATE_ROBOT_POSITION + 3] = state_dict["robot"]["position"]
+    state[STATE_ROBOT_ORIENTATION : STATE_ROBOT_ORIENTATION + 4] = state_dict["robot"]["orientation"]
 
     # Extrinsics
     if "hand_left_rgbd" in extrinsic_data:
-        entry = extrinsic_data["hand_left_rgbd"][frame_idx]
-        state[87:96] = np.array(entry["rotation"], dtype=np.float32).flatten()
-        state[141:144] = np.array(entry["translation"], dtype=np.float32)
+        rotation, translation = read_extrinsic_entry(extrinsic_data["hand_left_rgbd"][frame_idx])
+        state[87:96] = rotation.flatten()
+        state[141:144] = translation
 
     if "hand_right_rgbd" in extrinsic_data:
-        entry = extrinsic_data["hand_right_rgbd"][frame_idx]
-        state[96:105] = np.array(entry["rotation"], dtype=np.float32).flatten()
-        state[144:147] = np.array(entry["translation"], dtype=np.float32)
+        rotation, translation = read_extrinsic_entry(extrinsic_data["hand_right_rgbd"][frame_idx])
+        state[96:105] = rotation.flatten()
+        state[144:147] = translation
 
     if "head_front_rgbd" in extrinsic_data:
-        entry = extrinsic_data["head_front_rgbd"][frame_idx]
-        state[123:132] = np.array(entry["rotation"], dtype=np.float32).flatten()
-        state[153:156] = np.array(entry["translation"], dtype=np.float32)
+        rotation, translation = read_extrinsic_entry(extrinsic_data["head_front_rgbd"][frame_idx])
+        state[123:132] = rotation.flatten()
+        state[153:156] = translation
 
     return state
 
@@ -141,12 +160,12 @@ def build_action(action_dict: dict) -> np.ndarray:
 
     action[ACTION_LEFT_EFFECTOR] = action_dict["left_effector"]["position"][0]
     action[ACTION_RIGHT_EFFECTOR] = action_dict["right_effector"]["position"][0]
-    action[ACTION_END_POSITION:ACTION_END_POSITION + 6] = action_dict["end"]["position"].flatten()
-    action[ACTION_END_ORIENTATION:ACTION_END_ORIENTATION + 8] = action_dict["end"]["orientation"].flatten()
-    action[ACTION_JOINT_POSITION:ACTION_JOINT_POSITION + 14] = action_dict["joint"]["position"]
-    action[ACTION_HEAD_POSITION:ACTION_HEAD_POSITION + 3] = action_dict["head"]["position"]
-    action[ACTION_WAIST_POSITION:ACTION_WAIST_POSITION + 5] = action_dict["waist"]["position"]
-    action[ACTION_ROBOT_VELOCITY:ACTION_ROBOT_VELOCITY + 2] = action_dict["robot"]["velocity"]
+    action[ACTION_END_POSITION : ACTION_END_POSITION + 6] = action_dict["end"]["position"].flatten()
+    action[ACTION_END_ORIENTATION : ACTION_END_ORIENTATION + 8] = action_dict["end"]["orientation"].flatten()
+    action[ACTION_JOINT_POSITION : ACTION_JOINT_POSITION + 14] = action_dict["joint"]["position"]
+    action[ACTION_HEAD_POSITION : ACTION_HEAD_POSITION + 3] = action_dict["head"]["position"]
+    action[ACTION_WAIST_POSITION : ACTION_WAIST_POSITION + 5] = action_dict["waist"]["position"]
+    action[ACTION_ROBOT_VELOCITY : ACTION_ROBOT_VELOCITY + 2] = action_dict["robot"]["velocity"]
 
     return action
 
@@ -177,6 +196,7 @@ def read_h5_frame(h5_file, frame_id: str) -> tuple:
 # File loading utilities
 # ============================================================
 
+
 def load_extrinsics(agibot_dir: str) -> dict:
     """Load extrinsic calibration files. Returns dict mapping key -> list of per-frame data."""
     extrinsics = {}
@@ -201,6 +221,35 @@ def load_lerobot_reference(lerobot_dir: str):
         table = pq.read_table(parquet_path)
         return np.array(table.column("observation.state")[0].as_py(), dtype=np.float32)
     return None
+
+
+def load_episode_task_name(agibot_dir: str) -> str:
+    """Load the natural-language task name for one AgiBot episode."""
+    data_info_path = os.path.join(agibot_dir, "data_info.json")
+    if os.path.exists(data_info_path):
+        with open(data_info_path, encoding="utf-8") as f:
+            data_info = json.load(f)
+        for key in ("english_task_name", "task_name"):
+            task_name = data_info.get(key)
+            if isinstance(task_name, str) and task_name.strip():
+                return task_name.strip()
+
+    recording_info_path = os.path.join(agibot_dir, "recording_info.json")
+    if os.path.exists(recording_info_path):
+        with open(recording_info_path, encoding="utf-8") as f:
+            recording_info = json.load(f)
+        task_description = recording_info.get("task_description", {})
+        if isinstance(task_description, dict):
+            for key in ("english_task_name", "task_name"):
+                task_name = task_description.get(key)
+                if isinstance(task_name, str) and task_name.strip():
+                    return task_name.strip()
+
+        task_name = recording_info.get("task_name")
+        if isinstance(task_name, str) and task_name.strip():
+            return task_name.strip().strip("[]")
+
+    return os.path.basename(os.path.normpath(agibot_dir)).strip("[]")
 
 
 def fill_extrinsics_from_lerobot(extrinsic_data: dict, template: np.ndarray) -> dict:
@@ -234,49 +283,75 @@ def encode_videos(agibot_dir: str, output_dir: str, episode_index: int, fps: flo
 
     # video_key -> [(image_stem, ext, is_depth), ...]
     camera_map = {
-        "top_head":    [("head_color", "jpg", False), ("head_depth", "png", True)],
-        "hand_left":   [("hand_left_color", "jpg", False), ("hand_left_depth", "png", True)],
-        "hand_right":  [("hand_right_color", "jpg", False), ("hand_right_depth", "png", True)],
+        "top_head": [("head_color", "jpg", False), ("head_depth", "png", True)],
+        "hand_left": [("hand_left_color", "jpg", False), ("hand_left_depth", "png", True)],
+        "hand_right": [("hand_right_color", "jpg", False), ("hand_right_depth", "png", True)],
     }
 
     for video_key, image_list in camera_map.items():
         for image_stem, ext, is_depth in image_list:
             # Depth uses video_key + "_depth" as subdirectory
             vid_dir = video_key + "_depth" if is_depth else video_key
-            video_path = os.path.join(output_dir, "videos",
-                                     chunk_name, vid_dir,
-                                     f"episode_{episode_index:06d}.mp4")
+            video_path = os.path.join(output_dir, "videos", chunk_name, vid_dir, f"episode_{episode_index:06d}.mp4")
             os.makedirs(os.path.dirname(video_path), exist_ok=True)
             input_pattern = os.path.join(camera_dir, f"%d/{image_stem}.{ext}")
 
             if is_depth:
-                result = subprocess.run([
-                    "ffmpeg", "-y",
-                    "-framerate", str(int(fps)),
-                    "-i", input_pattern,
-                    "-c:v", "png",
-                    "-pix_fmt", "gray16le",
-                    "-r", str(int(fps)),
-                    "-movflags", "+faststart",
-                    video_path,
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-framerate",
+                        str(int(fps)),
+                        "-i",
+                        input_pattern,
+                        "-c:v",
+                        "png",
+                        "-pix_fmt",
+                        "gray16le",
+                        "-r",
+                        str(int(fps)),
+                        "-movflags",
+                        "+faststart",
+                        video_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
             else:
-                result = subprocess.run([
-                    "ffmpeg", "-y",
-                    "-f", "image2",
-                    "-threads", "4",
-                    "-r", str(int(fps)),
-                    "-i", input_pattern,
-                    "-vcodec", "libx265",
-                    "-pix_fmt", "yuv420p",
-                    "-keyint_min", "8",
-                    "-sc_threshold", "0",
-                    "-vf", f"setpts=N/({int(fps)}*TB)",
-                    "-bf", "0",
-                    "-crf", "24",
-                    "-g", "8",
-                    video_path,
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "image2",
+                        "-threads",
+                        "4",
+                        "-r",
+                        str(int(fps)),
+                        "-i",
+                        input_pattern,
+                        "-vcodec",
+                        "libx265",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-keyint_min",
+                        "8",
+                        "-sc_threshold",
+                        "0",
+                        "-vf",
+                        f"setpts=N/({int(fps)}*TB)",
+                        "-bf",
+                        "0",
+                        "-crf",
+                        "24",
+                        "-g",
+                        "8",
+                        video_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
 
             if result.returncode != 0:
                 print(f"  ERROR encoding {vid_dir}: {result.stderr[-500:]}")
@@ -298,11 +373,20 @@ def detect_episodes(agibot_root: str) -> list:
 # Episode conversion
 # ============================================================
 
-def convert_episode(agibot_dir: str, output_dir: str, episode_index: int,
-                    lerobot_template: np.ndarray, fps: float = 30.0) -> dict:
+
+def convert_episode(
+    agibot_dir: str,
+    output_dir: str,
+    episode_index: int,
+    lerobot_template: np.ndarray,
+    fps: float = 30.0,
+    task_name: str = "",
+    task_index: int = 0,
+) -> dict:
     """Convert a single agibot episode. Returns dict with stats."""
     print(f"\n{'='*60}")
     print(f"Converting episode {episode_index}: {agibot_dir}")
+    print(f"  Task: {task_name} (task_index={task_index})")
 
     extrinsic_data = load_extrinsics(agibot_dir)
     extrinsic_data = fill_extrinsics_from_lerobot(extrinsic_data, lerobot_template)
@@ -311,9 +395,12 @@ def convert_episode(agibot_dir: str, output_dir: str, episode_index: int,
     h5_all_path = os.path.join(agibot_dir, "aligned_joints_all.h5")
 
     frame_ids = sorted(
-        [d for d in os.listdir(os.path.join(agibot_dir, "camera"))
-         if os.path.isdir(os.path.join(agibot_dir, "camera", d))],
-        key=lambda x: int(x)
+        [
+            d
+            for d in os.listdir(os.path.join(agibot_dir, "camera"))
+            if os.path.isdir(os.path.join(agibot_dir, "camera", d))
+        ],
+        key=lambda x: int(x),
     )
 
     with h5py.File(h5_path, "r") as f_h5, h5py.File(h5_all_path, "r") as f_h5_all:
@@ -325,9 +412,7 @@ def convert_episode(agibot_dir: str, output_dir: str, episode_index: int,
         for i, fid in enumerate(frame_ids):
             action_dict, state_dict, ts_ns = read_h5_frame(f_h5, fid)
             joint_all_dict = {
-                "joint": {"position": joint_pos_all[i],
-                          "effort": joint_eff_all[i],
-                          "velocity": joint_vel_all[i]}
+                "joint": {"position": joint_pos_all[i], "effort": joint_eff_all[i], "velocity": joint_vel_all[i]}
             }
             states.append(build_state(state_dict, joint_all_dict, extrinsic_data, frame_idx=i))
             actions.append(build_action(action_dict))
@@ -340,20 +425,20 @@ def convert_episode(agibot_dir: str, output_dir: str, episode_index: int,
 
     # Build parquet using fixed_size_list to match reference schema exactly
     # pa.list_(dtype, length) creates FixedSizeListType (matching reference parquet schema)
-    table = pa.table({
-        "observation.state": pa.array(states, type=pa.list_(pa.float32(), 159)),
-        "action": pa.array(actions, type=pa.list_(pa.float32(), 40)),
-        "episode_index": pa.array([episode_index] * num_frames, type=pa.int64()),
-        "frame_index": pa.array(list(range(num_frames)), type=pa.int64()),
-        "index": pa.array(list(range(num_frames)), type=pa.int64()),
-        "task_index": pa.array([0] * num_frames, type=pa.int64()),
-        "timestamp": pa.array(ideal_timestamps, type=pa.float32()),
-    })
+    table = pa.table(
+        {
+            "observation.state": pa.array(states, type=pa.list_(pa.float32(), 159)),
+            "action": pa.array(actions, type=pa.list_(pa.float32(), 40)),
+            "episode_index": pa.array([episode_index] * num_frames, type=pa.int64()),
+            "frame_index": pa.array(list(range(num_frames)), type=pa.int64()),
+            "index": pa.array(list(range(num_frames)), type=pa.int64()),
+            "task_index": pa.array([task_index] * num_frames, type=pa.int64()),
+            "timestamp": pa.array(ideal_timestamps, type=pa.float32()),
+        }
+    )
 
     # Add huggingface schema metadata (present in reference v2.1 parquet files)
-    metadata = {
-        b"huggingface": json.dumps(ARROW_SCHEMA_HUGGINGFACE_METADATA).encode()
-    }
+    metadata = {b"huggingface": json.dumps(ARROW_SCHEMA_HUGGINGFACE_METADATA).encode()}
     table = table.replace_schema_metadata(metadata)
 
     chunk_name = f"chunk-{episode_index // 1000:03d}"
@@ -368,12 +453,13 @@ def convert_episode(agibot_dir: str, output_dir: str, episode_index: int,
     # Encode videos
     encode_videos(agibot_dir, output_dir, episode_index, fps=fps)
 
-    return {"episode_index": episode_index, "length": num_frames}
+    return {"episode_index": episode_index, "length": num_frames, "task": task_name, "task_index": task_index}
 
 
 # ============================================================
 # Meta file generation
 # ============================================================
+
 
 def load_camera_parameters(agibot_dir: str) -> dict:
     """Load camera intrinsic/extrinsic parameters from agibot sensor directory."""
@@ -394,29 +480,37 @@ def load_camera_parameters(agibot_dir: str) -> dict:
 def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
     """Generate info.json, tasks.jsonl, episodes.jsonl, episodes_stats.jsonl."""
     os.makedirs(os.path.join(output_dir, "meta"), exist_ok=True)
-    """Generate info.json, tasks.jsonl, episodes.jsonl, episodes_stats.jsonl."""
-    os.makedirs(os.path.join(output_dir, "meta"), exist_ok=True)
+
+    tasks = {}
+    for ep in episode_info:
+        tasks.setdefault(ep["task_index"], ep["task"])
 
     # tasks.jsonl
     with open(os.path.join(output_dir, "meta", "tasks.jsonl"), "w") as f:
-        f.write(json.dumps({"task_index": 0, "task": "Pop the popcorn"}, ensure_ascii=False) + "\n")
+        for task_index, task in sorted(tasks.items()):
+            f.write(json.dumps({"task_index": task_index, "task": task}, ensure_ascii=False) + "\n")
 
     # episodes.jsonl
     with open(os.path.join(output_dir, "meta", "episodes.jsonl"), "w") as f:
         for ep in episode_info:
-            f.write(json.dumps({
-                "episode_index": ep["episode_index"],
-                "tasks": ["Pop the popcorn"],
-                "length": ep["length"],
-            }, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "episode_index": ep["episode_index"],
+                        "tasks": [ep["task"]],
+                        "length": ep["length"],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
 
     # episodes_stats.jsonl
     stats_episodes = []
     for ep in episode_info:
         ep_idx = ep["episode_index"]
         chunk_name = f"chunk-{ep_idx // 1000:03d}"
-        parquet_path = os.path.join(output_dir, "data", chunk_name,
-                                    f"episode_{ep_idx:06d}.parquet")
+        parquet_path = os.path.join(output_dir, "data", chunk_name, f"episode_{ep_idx:06d}.parquet")
         if os.path.exists(parquet_path):
             table = pq.read_table(parquet_path)
             rows = table.to_pylist()
@@ -425,6 +519,7 @@ def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
             action_col = np.array([r["action"] for r in rows], dtype=np.float32)
             frame_index_col = np.array([r["frame_index"] for r in rows], dtype=np.int64)
             index_col = np.array([r["index"] for r in rows], dtype=np.int64)
+            task_index_col = np.array([r["task_index"] for r in rows], dtype=np.int64)
             timestamp_col = np.array([r["timestamp"] for r in rows], dtype=np.float32)
 
             # Video fields: per-frame stats as nested arrays (matches reference format)
@@ -483,10 +578,10 @@ def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
                         "count": [num_frames],
                     },
                     "task_index": {
-                        "min": [0],
-                        "max": [0],
-                        "mean": [0.0],
-                        "std": [0.0],
+                        "min": [int(task_index_col.min())],
+                        "max": [int(task_index_col.max())],
+                        "mean": [float(task_index_col.mean())],
+                        "std": [float(task_index_col.std())],
                         "count": [num_frames],
                     },
                     "timestamp": {
@@ -522,7 +617,7 @@ def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
 
     for i, ep_dir in enumerate(agibot_dirs):
         h5_path[str(i)] = f"frame://{ep_dir}/aligned_joints.h5"
-        high_level_instruction[str(i)] = {"high_level_instruction": ""}
+        high_level_instruction[str(i)] = {"high_level_instruction": episode_info[i]["task"]}
         instruction_segments[str(i)] = []
         intervention_info[str(i)] = {}
         key_frame[str(i)] = {"single": [], "dual": []}
@@ -546,7 +641,7 @@ def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
         "robot_type": "g2a",
         "total_episodes": total_episodes,
         "total_frames": total_frames,
-        "total_tasks": 1,
+        "total_tasks": len(tasks),
         "total_videos": total_episodes * 3,
         "total_chunks": total_chunks,
         "chunks_size": 1000,
@@ -557,31 +652,48 @@ def generate_meta(output_dir: str, episode_info: list, agibot_dirs: list):
         "features": {
             "observation.images.top_head": {
                 "dtype": "video",
-                "video_info": {"video.is_depth_map": False, "video.fps": 30.0,
-                               "video.codec": "hevc", "video.pix_fmt": "yuv420p", "has_audio": False},
+                "video_info": {
+                    "video.is_depth_map": False,
+                    "video.fps": 30.0,
+                    "video.codec": "hevc",
+                    "video.pix_fmt": "yuv420p",
+                    "has_audio": False,
+                },
                 "shape": [400, 640, 3],
                 "names": ["height", "width", "channel"],
             },
             "observation.images.hand_left": {
                 "dtype": "video",
-                "video_info": {"video.is_depth_map": False, "video.fps": 30.0,
-                               "video.codec": "hevc", "video.pix_fmt": "yuv420p", "has_audio": False},
+                "video_info": {
+                    "video.is_depth_map": False,
+                    "video.fps": 30.0,
+                    "video.codec": "hevc",
+                    "video.pix_fmt": "yuv420p",
+                    "has_audio": False,
+                },
                 "shape": [1056, 1280, 3],
                 "names": ["height", "width", "channel"],
             },
             "observation.images.hand_right": {
                 "dtype": "video",
-                "video_info": {"video.is_depth_map": False, "video.fps": 30.0,
-                               "video.codec": "hevc", "video.pix_fmt": "yuv420p", "has_audio": False},
+                "video_info": {
+                    "video.is_depth_map": False,
+                    "video.fps": 30.0,
+                    "video.codec": "hevc",
+                    "video.pix_fmt": "yuv420p",
+                    "has_audio": False,
+                },
                 "shape": [1056, 1280, 3],
                 "names": ["height", "width", "channel"],
             },
             "observation.state": {
-                "dtype": "float32", "shape": [159],
+                "dtype": "float32",
+                "shape": [159],
                 "field_descriptions": _get_state_field_descriptions(),
             },
             "action": {
-                "dtype": "float32", "shape": [40],
+                "dtype": "float32",
+                "shape": [40],
                 "field_descriptions": _get_action_field_descriptions(),
             },
             "episode_index": {"dtype": "int64", "shape": [1], "names": None},
@@ -649,18 +761,66 @@ def _get_state_field_descriptions():
         "state/right_ee_force/contact": {"description": "", "dimensions": 0, "indices": []},
         "state/right_ee_force/valid": {"description": "", "dimensions": 0, "indices": []},
         "state/right_ee_force/err_code": {"description": "", "dimensions": 0, "indices": []},
-        "extrinsic_end_T_hand_left_rgbd_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(87, 96))},
-        "extrinsic_end_T_hand_right_rgbd_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(96, 105))},
-        "extrinsic_end_T_head_left_fisheye_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(105, 114))},
-        "extrinsic_end_T_head_right_fisheye_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(114, 123))},
-        "extrinsic_end_T_head_front_rgbd_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(123, 132))},
-        "extrinsic_end_T_head_back_fisheye_aligned/rotation_matrix": {"description": "", "dimensions": 9, "indices": list(range(132, 141))},
-        "extrinsic_end_T_hand_left_rgbd_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(141, 144))},
-        "extrinsic_end_T_hand_right_rgbd_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(144, 147))},
-        "extrinsic_end_T_head_left_fisheye_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(147, 150))},
-        "extrinsic_end_T_head_right_fisheye_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(150, 153))},
-        "extrinsic_end_T_head_front_rgbd_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(153, 156))},
-        "extrinsic_end_T_head_back_fisheye_aligned/translation_vector": {"description": "", "dimensions": 3, "indices": list(range(156, 159))},
+        "extrinsic_end_T_hand_left_rgbd_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(87, 96)),
+        },
+        "extrinsic_end_T_hand_right_rgbd_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(96, 105)),
+        },
+        "extrinsic_end_T_head_left_fisheye_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(105, 114)),
+        },
+        "extrinsic_end_T_head_right_fisheye_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(114, 123)),
+        },
+        "extrinsic_end_T_head_front_rgbd_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(123, 132)),
+        },
+        "extrinsic_end_T_head_back_fisheye_aligned/rotation_matrix": {
+            "description": "",
+            "dimensions": 9,
+            "indices": list(range(132, 141)),
+        },
+        "extrinsic_end_T_hand_left_rgbd_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(141, 144)),
+        },
+        "extrinsic_end_T_hand_right_rgbd_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(144, 147)),
+        },
+        "extrinsic_end_T_head_left_fisheye_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(147, 150)),
+        },
+        "extrinsic_end_T_head_right_fisheye_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(150, 153)),
+        },
+        "extrinsic_end_T_head_front_rgbd_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(153, 156)),
+        },
+        "extrinsic_end_T_head_back_fisheye_aligned/translation_vector": {
+            "description": "",
+            "dimensions": 3,
+            "indices": list(range(156, 159)),
+        },
     }
 
 
@@ -681,15 +841,22 @@ def _get_action_field_descriptions():
 # Main entry point
 # ============================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Convert agibot data to LeRobot format")
-    parser.add_argument("--agibot_dir", type=str, required=True,
-                        help="Path to agibot episode dir, or parent dir containing multiple episode subdirs")
-    parser.add_argument("--output_dir", type=str, required=True,
-                        help="Output directory for lerobot format data")
-    parser.add_argument("--lerobot_ref_dir", type=str,
-                        default="/home/agiuser/下载/convert_to_lerobot",
-                        help="Path to reference lerobot dataset directory (must contain data/chunk-000/episode_000000.parquet)")
+    parser.add_argument(
+        "--agibot_dir",
+        type=str,
+        required=True,
+        help="Path to agibot episode dir, or parent dir containing multiple episode subdirs",
+    )
+    parser.add_argument("--output_dir", type=str, required=True, help="Output directory for lerobot format data")
+    parser.add_argument(
+        "--lerobot_ref_dir",
+        type=str,
+        default="/home/agiuser/下载/convert_to_lerobot",
+        help="Path to reference lerobot dataset directory (must contain data/chunk-000/episode_000000.parquet)",
+    )
     parser.add_argument("--fps", type=float, default=30.0, help="Video FPS (default: 30.0)")
     args = parser.parse_args()
 
@@ -713,9 +880,23 @@ def main():
     for ep in episodes:
         print(f"  - {ep}")
 
+    task_names = [load_episode_task_name(ep_dir) for ep_dir in episodes]
+    unique_tasks = {}
+    for task_name in task_names:
+        unique_tasks.setdefault(task_name, len(unique_tasks))
+
     episode_info = []
     for i, ep_dir in enumerate(episodes):
-        result = convert_episode(ep_dir, output_dir, i, lerobot_template, fps=args.fps)
+        task_name = task_names[i]
+        result = convert_episode(
+            ep_dir,
+            output_dir,
+            i,
+            lerobot_template,
+            fps=args.fps,
+            task_name=task_name,
+            task_index=unique_tasks[task_name],
+        )
         episode_info.append(result)
 
     generate_meta(output_dir, episode_info, episodes)

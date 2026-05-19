@@ -39,17 +39,35 @@ if __name__ == "__main__":
         default="tasks/task.json",
         help="",
     )
+    parser.add_argument(
+        "--num_episode",
+        type=int,
+        default=None,
+        help="Override recording_setting.num_of_episode; this is the maximum number of task attempts to generate.",
+    )
+    parser.add_argument(
+        "--target_success",
+        type=int,
+        default=None,
+        help="Stop after this many successful task executions. Use with --num_episode as the max attempt budget.",
+    )
     args = parser.parse_args()
     task_template_file = args.task_template
     with open(task_template_file, "r") as file:
         task_info = json.load(file)
 
     # generate task info
+    task_num = args.num_episode
+    if task_num is None:
+        task_num = task_info["recording_setting"]["num_of_episode"]
+    if args.target_success is not None:
+        task_num = max(task_num, args.target_success)
+
     task_generator = TaskGenerator(task_info)
     task_folder = "saved_task/%s" % (task_info["task"])
     task_generator.generate_tasks(
         save_path=task_folder,
-        task_num=task_info["recording_setting"]["num_of_episode"],
+        task_num=task_num,
         task_name=task_info["task"],
     )
     robot_position = task_generator.robot_init_pose["position"]
@@ -89,6 +107,7 @@ if __name__ == "__main__":
         fps=task_info["recording_setting"]["fps"],
         render_semantic=render_semantic,
         origin_task_info=task_info,
+        target_success=args.target_success,
     )
     logger.info("job done")
     robot.client.exit()

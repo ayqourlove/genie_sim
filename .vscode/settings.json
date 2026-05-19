@@ -1,4 +1,10 @@
 {
+  "python.defaultInterpreterPath": "/home/gzy/vla/env_vla/bin/python",
+  "python.analysis.extraPaths": [
+    "/home/gzy/vla/curobo",
+    "/home/gzy/vla/env_vla/lib/python3.11/site-packages",
+    "/opt/ros/jazzy/lib/python3.12/site-packages"
+  ],
   "[dockerfile]": {
     "editor.defaultFormatter": "ms-azuretools.vscode-docker"
   },
@@ -11,37 +17,38 @@
   ],
   "cmake.ignoreCMakeListsMissing": true,
   "cursorpyright.analysis.extraPaths": [
-    "~/isaacsim/exts/omni.isaac.core",
-    "~/isaacsim/exts/omni.isaac.core_nodes",
-    "~/isaacsim/exts/omni.isaac.dynamic_control",
-    "~/isaacsim/exts/omni.isaac.kit",
-    "~/isaacsim/exts/omni.isaac.ros2_bridge",
-    "~/isaacsim/exts/omni.isaac.sensor",
-    "~/isaacsim/exts/omni.replicator.isaac",
-    "~/isaacsim/exts/omni.isaac.repl",
-    "~/isaacsim/exts/omni.isaac.utils",
-    "~/isaacsim/exts/omni.isaac.wheeled_robots",
-    "~/isaacsim/kit/exts/omni.graph",
-    "~/isaacsim/kit/exts/omni.syntheticdata",
-    "~/isaacsim/kit/exts/omni.usd.libs/",
-    "~/isaacsim/extscache/omni.replicator.core-1.11.14+106.0.1.lx64.r.cp310/",
-    "~/isaacsim/exts/omni.isaac.manipulators",
-    "~/isaacsim/extsPhysics/omni.physx"
+    "~/Desktop/isaacsim/exts/omni.isaac.core",
+    "~/Desktop/isaacsim/exts/omni.isaac.core_nodes",
+    "~/Desktop/isaacsim/exts/omni.isaac.dynamic_control",
+    "~/Desktop/isaacsim/exts/omni.isaac.kit",
+    "~/Desktop/isaacsim/exts/omni.isaac.ros2_bridge",
+    "~/Desktop/isaacsim/exts/omni.isaac.sensor",
+    "~/Desktop/isaacsim/exts/omni.replicator.isaac",
+    "~/Desktop/isaacsim/exts/omni.isaac.repl",
+    "~/Desktop/isaacsim/exts/omni.isaac.utils",
+    "~/Desktop/isaacsim/exts/omni.isaac.wheeled_robots",
+    "~/Desktop/isaacsim/kit/exts/omni.graph",
+    "~/Desktop/isaacsim/kit/exts/omni.syntheticdata",
+    "~/Desktop/isaacsim/kit/exts/omni.usd.libs/",
+    "~/Desktop/isaacsim/extscache/omni.replicator.core-1.11.14+106.0.1.lx64.r.cp310/",
+    "~/Desktop/isaacsim/exts/omni.isaac.manipulators",
+    "~/Desktop/isaacsim/extsPhysics/omni.physx",
+    "/home/gzy/vla/curobo",
+    "/home/gzy/vla/env_vla/lib/python3.11/site-packages"
   ],
   "editor.formatOnSave": true,
   "files.insertFinalNewline": true,
   "git.enableSmartCommit": true,
-  "python-envs.pythonProjects": [
-    {
-      "envManager": "ms-python.python:conda",
-      "packageManager": "ms-python.python:conda",
-      "path": ""
-    }
-  ],
   "python.formatting.provider": "black",
   "ros.distro": "humble",
   "ros.isolateEnvironment": "false",
   "ros.rosSetupScript": "/opt/ros/humble/install/setup.zsh",
   "security.workspace.trust.untrustedFiles": "open",
-  "terminal.integrated.inheritEnv": false
+  "terminal.integrated.inheritEnv": false,
+  "ROS2.distro": "jazzy",
+  "python.autoComplete.extraPaths": [
+    "/opt/ros/jazzy/lib/python3.12/site-packages"
+  ],
+  "python-envs.defaultEnvManager": "ms-python.python:venv",
+  "python-envs.defaultPackageManager": "ms-python.python:pip"
 }

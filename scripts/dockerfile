@@ -7,6 +7,9 @@ ENV ACCEPT_EULA=Y
 ENV PRIVACY_CONSENT=Y
 ENV DEBIAN_FRONTEND=noninteractive
 
+ENV http_proxy=http://127.0.0.1:7890
+ENV https_proxy=http://127.0.0.1:7890
+
 # sys
 USER root
 RUN apt-get update && apt-get install -y \
@@ -31,6 +34,8 @@ RUN apt-get update && apt-get install -y \
     libx11-6 libxrandr2 libxss1 libxcursor1 libxi6 libglu1-mesa \
     libgl1 libegl1 libnss3 libxcomposite1 libxdamage1 libxext6 \
     liburing2 liburing-dev
+
+RUN curl google.com
 
 RUN usermod -aG sudo isaac-sim
 RUN echo "isaac-sim ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/isaac-sim && chmod 0440 /etc/sudoers.d/isaac-sim

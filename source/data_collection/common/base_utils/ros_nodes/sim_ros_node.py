@@ -6,14 +6,13 @@ import os
 import sys
 
 import numpy as np
-from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import Header
 
 from common.base_utils.logger import logger
+from common.base_utils.ros_nodes.cv_bridge_compat import CvBridge
 
 ROOT_DIR = os.getenv("SIM_REPO_ROOT")
 UTIL_DIR = os.path.join(str(ROOT_DIR), "base_utils")
@@ -46,10 +45,7 @@ class SimPubRosNode(Node):
         node_name="sim_ros_node",
         step_size=1,
     ):
-        super().__init__(
-            node_name,
-            parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
-        )
+        super().__init__(node_name)
         self._robot_name = robot_name
         self._publisher = self.create_publisher(type, topic, 1)
         self._topic = topic

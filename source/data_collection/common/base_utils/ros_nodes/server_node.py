@@ -8,15 +8,12 @@ from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
 from tf2_msgs.msg import TFMessage
 
-from common.base_utils.ros_nodes.base_nodes import Node, Parameter
+from common.base_utils.ros_nodes.base_nodes import Node
 
 
 class ServerNode(Node):
     def __init__(self, robot_name="G1_120s", node_name="server_ros_node"):
-        super().__init__(
-            node_name=node_name,
-            parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
-        )
+        super().__init__(node_name=node_name)
 
         self.robot_name = robot_name
 

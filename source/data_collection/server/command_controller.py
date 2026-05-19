@@ -1,6 +1,8 @@
+import atexit
 import json
 import os
 import queue
+import shlex
 import shutil
 import signal
 import subprocess
@@ -42,6 +44,24 @@ from server.ui_builder import UIBuilder
 from server.utils import batch_matrices_to_quaternions_scipy_w_first
 
 MAX_EXTRACT_PROCESS_NUM = 2
+ROS_RECORD_PROCESS_STOP_TIMEOUT = int(os.getenv("ROS_RECORD_PROCESS_STOP_TIMEOUT", "15"))
+ROS_RECORD_PROCESS_TERM_TIMEOUT = int(os.getenv("ROS_RECORD_PROCESS_TERM_TIMEOUT", "5"))
+
+
+def get_ros_cli_env_setup(ros_cmd_distro: str):
+    rmw_implementation = os.getenv("ROS_CLI_RMW_IMPLEMENTATION")
+    if rmw_implementation:
+        rmw_setup = f"export RMW_IMPLEMENTATION={shlex.quote(rmw_implementation)}"
+    else:
+        # Do not inherit the Isaac Sim process RMW blindly. Local ROS installs may
+        # not provide the same RMW implementation as the Isaac Sim ROS bridge.
+        rmw_setup = "unset RMW_IMPLEMENTATION"
+    return f"""
+                        unset PYTHONPATH
+                        unset LD_LIBRARY_PATH
+                        source /opt/ros/{shlex.quote(ros_cmd_distro)}/setup.bash
+                        {rmw_setup}
+                        """
 
 
 def find_joints(prim):
@@ -137,6 +157,98 @@ class CommandController:
         # ros
         if publish_ros:
             rclpy.init()
+        atexit.register(self.cleanup_ros_processes)
+
+    def _start_process_group(self, *args, **kwargs):
+        """Start a subprocess in its own process group and remember that group."""
+        kwargs["preexec_fn"] = os.setsid
+        process = subprocess.Popen(*args, **kwargs)
+        try:
+            process._geniesim_pgid = os.getpgid(process.pid)
+        except ProcessLookupError:
+            process._geniesim_pgid = None
+        self.process.append(process)
+        return process
+
+    def cleanup_ros_processes(self):
+        if not getattr(self, "process", None):
+            return
+
+        processes = list(self.process)
+        for process in processes:
+            self._signal_process_group(process, signal.SIGINT, "interrupt")
+
+        deadline = time.time() + ROS_RECORD_PROCESS_STOP_TIMEOUT
+        for process in processes:
+            remaining = max(0.0, deadline - time.time())
+            self._wait_process(process, remaining)
+
+        for process in processes:
+            if process.poll() is None or self._process_group_exists(process):
+                self._signal_process_group(process, signal.SIGTERM, "terminate")
+
+        deadline = time.time() + ROS_RECORD_PROCESS_TERM_TIMEOUT
+        for process in processes:
+            remaining = max(0.0, deadline - time.time())
+            self._wait_process(process, remaining)
+
+        for process in processes:
+            if process.poll() is None or self._process_group_exists(process):
+                self._signal_process_group(process, signal.SIGKILL, "kill")
+                self._wait_process(process, 1)
+
+        self.process = []
+
+    def _signal_process_group(self, process, sig, action):
+        pgid = getattr(process, "_geniesim_pgid", None)
+        if pgid is None:
+            try:
+                pgid = os.getpgid(process.pid)
+            except ProcessLookupError:
+                return
+            except Exception as e:
+                logger.warning(f"Failed to get process group for {process.pid}: {e}")
+                return
+
+        try:
+            os.killpg(pgid, sig)
+            logger.info(f"Sent {signal.Signals(sig).name} to ROS process group {pgid} for {action}")
+        except ProcessLookupError:
+            logger.info(f"ROS process group {pgid} has exited")
+        except Exception as e:
+            logger.warning(f"Failed to {action} ROS process group {pgid}: {e}")
+
+    def _process_group_exists(self, process):
+        pgid = getattr(process, "_geniesim_pgid", None)
+        if pgid is None:
+            return False
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to inspect ROS process group {pgid}: {e}")
+            return False
+
+    def _wait_process(self, process, timeout):
+        if process.poll() is not None:
+            return
+        try:
+            process.wait(timeout=timeout)
+            logger.info(f"ROS process {process.pid} has exited")
+        except subprocess.TimeoutExpired:
+            logger.warning(f"ROS process {process.pid} did not exit within {timeout:.1f}s")
+        except Exception as e:
+            logger.warning(f"Error waiting for ROS process {process.pid}: {e}")
+
+    def __del__(self):
+        try:
+            self.cleanup_ros_processes()
+        except Exception:
+            pass
 
     def _timing_context(self, function_name: str):
         """Timing context manager for counting function execution time"""
@@ -748,6 +860,7 @@ class CommandController:
                 self.fps = self.data["fps"]
                 current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 root_path = current_directory + "/recording_data/"
+                os.makedirs(root_path, exist_ok=True)
                 recording_path = root_path + self.task_name
                 if os.path.isdir(recording_path):
                     folder_index = 1
@@ -793,20 +906,17 @@ class CommandController:
                 if self.publish_ros:
                     ros_cmd_distro = os.getenv("ROS_CMD_DISTRO", "humble")
                     exclude_args = "--exclude-regex" if ros_cmd_distro != "humble" else "--exclude"
+                    ros_cli_env_setup = get_ros_cli_env_setup(ros_cmd_distro)
                     command_str = f"""
-                        unset PYTHONPATH
-                        unset LD_LIBRARY_PATH
-                        source /opt/ros/{ros_cmd_distro}/setup.bash
-                        ros2 bag record -o {recording_path} {exclude_args} '.*_rgb(?!_)' -a
+                        {ros_cli_env_setup}
+                        ros2 bag record -o {shlex.quote(recording_path)} {exclude_args} '.*_rgb(?!_)' -a
                         """
                     logger.info("publish_ros command: " + command_str)
-                    process = subprocess.Popen(
+                    self._start_process_group(
                         command_str,
                         shell=True,
                         executable="/bin/bash",
-                        preexec_fn=os.setsid,
                     )
-                    self.process.append(process)
                     frequency = (int)(
                         1 / (self.ui_builder.my_world.get_rendering_dt() * self.data["fps"])
                     )  # this is actually step_size in the condition of 60 fps
@@ -915,20 +1025,17 @@ class CommandController:
                         compressed_name = topic_name + "_compressed"
                         ros_cmd_distro = os.getenv("ROS_CMD_DISTRO", "humble")
                         extra_args = "--remap _out_transport:=compressed" if ros_cmd_distro != "humble" else ""
+                        ros_cli_env_setup = get_ros_cli_env_setup(ros_cmd_distro)
                         command_str = f"""
-                        unset PYTHONPATH
-                        unset LD_LIBRARY_PATH
-                        source /opt/ros/{ros_cmd_distro}/setup.bash
+                        {ros_cli_env_setup}
                         ros2 run image_transport republish raw compressed {extra_args} --ros-args --remap /in:={topic_name} --remap /out:={compressed_name}
                         """
                         logger.info(command_str)
-                        subpro = subprocess.Popen(
+                        self._start_process_group(
                             command_str,
                             shell=True,
                             executable="/bin/bash",
-                            preexec_fn=os.setsid,
                         )
-                        self.process.append(subpro)
                     if not self.ros_node_initialized:
                         self.server_ros_node = ServerNode(robot_name=self.robot_name)
                         self.ros_node_initialized = True
@@ -938,26 +1045,8 @@ class CommandController:
         elif self.data["stopRecording"]:
             with self._timing_context("stop_recording"):
                 if self.publish_ros:
-                    for process in self.process:
-                        try:
-                            if process.poll() is None:  # Check if process is still running
-                                os.killpg(os.getpgid(process.pid), signal.SIGINT)
-                                logger.info(f"Sent SIGINT to process group {process.pid}")
-                        except ProcessLookupError:
-                            logger.info(f"Process {process.pid} has exited")
-                        except Exception as e:
-                            logger.info(f"Failed to send signal to process {process.pid}: {e}")
-                    for process in self.process:
-                        try:
-                            if process.poll() is None:
-                                os.killpg(os.getpgid(process.pid), signal.SIGINT)
-                                process.wait(timeout=5)  # Wait for rosbag to exit completely
-                        except Exception as e:
-                            logger.info(f"Failed to force terminate process {process.pid}: {e}")
-                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    self.cleanup_ros_processes()
                     self.ui_builder.remove_graph(self.graph_path)
-
-                    self.process = []
                 self.data_to_send = "Stopped"
         else:
             raise ValueError("Invalid command: GetObservation is not supported")
@@ -1026,6 +1115,12 @@ class CommandController:
                     "object_asset_dict": self.object_asset_dict,
                 }
                 task_info_path = self.path_to_save + "/recording_info.json"
+                if not os.path.isdir(self.path_to_save):
+                    logger.warning(
+                        "Recording output directory does not exist before writing metadata: "
+                        f"{self.path_to_save}. Creating it now. The rosbag process may have failed to start."
+                    )
+                    os.makedirs(self.path_to_save, exist_ok=True)
                 with open(task_info_path, "w") as f:
                     json.dump(task_info, f, indent=4)
                 with open(
@@ -1086,6 +1181,7 @@ class CommandController:
 
     def handle_exit(self):
         """Handle Command 17: Exit"""
+        self.cleanup_ros_processes()
         # wait for extract process to finish
         for process, log_file in self.extract_process:
             try:

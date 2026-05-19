@@ -841,10 +841,15 @@ class DataCollectionAgent(BaseAgent):
         fps=10,
         render_semantic=False,
         origin_task_info={},
+        target_success=None,
     ):
-        tasks = glob.glob(task_folder + "/*.json")
+        tasks = sorted(glob.glob(task_folder + "/*.json"))
+        success_count = 0
         for index, task_file in enumerate(tasks):
             success = True
+            if target_success is not None and success_count >= target_success:
+                logger.info(f"Target success count reached: {success_count}/{target_success}")
+                break
             if not self.check_task_file(task_file):
                 logger.error(f"Task file {task_file} check failed, skip this task")
                 continue
@@ -986,6 +991,12 @@ class DataCollectionAgent(BaseAgent):
             task_info.copy()
             self.robot.client.send_task_status(success, fail_stage_step)
             if success:
+                success_count += 1
                 logger.info(">>>>>>>>>>>>>>>>>>>>  TASK SUCCESS ! <<<<<<<<<<<<<<<<<<<<")
+                if target_success is not None:
+                    logger.info(f"Success progress: {success_count}/{target_success}")
 
-        return True
+        if target_success is not None and success_count < target_success:
+            logger.warning(f"Target success count not reached: {success_count}/{target_success}")
+
+        return success_count

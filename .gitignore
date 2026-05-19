@@ -3,10 +3,9 @@ build_/
 
 saved_task/*
 saved_task/
-
+debug_preview
 assets/
 assets
-
 **/*/data/
 **/__pycache__
 *.pyc

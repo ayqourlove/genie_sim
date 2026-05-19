@@ -6,14 +6,13 @@ import os
 import sys
 import threading
 
-from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import JointState
 from tf2_msgs.msg import TFMessage
 
 from common.base_utils.logger import logger
+from common.base_utils.ros_nodes.cv_bridge_compat import CvBridge
 
 ROOT_DIR = os.getenv("SIM_REPO_ROOT")
 UTIL_DIR = os.path.join(str(ROOT_DIR), "base_utils")
@@ -43,10 +42,7 @@ QOS_PROFILE_VOLATILE = QoSProfile(
 
 class SimNode(Node):
     def __init__(self, robot_name="G1_120s", node_name="sim_ros_node"):
-        super().__init__(
-            node_name,
-            parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
-        )
+        super().__init__(node_name)
         self.init_pose = None
         self.robot_name = robot_name
         self.config_robot()

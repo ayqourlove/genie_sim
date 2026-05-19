@@ -3,7 +3,7 @@
 set -e
 
 REPO_URL="https://github.com/AgibotTech/ACoT-VLA.git"
-BRANCH="genie_sim"
+BRANCH="main"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
