@@ -1,6 +1,6 @@
 build/
 build_/
-
+openpi_geniesim/
 saved_task/*
 saved_task/
 debug_preview
