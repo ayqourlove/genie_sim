@@ -44,8 +44,17 @@ class PiPolicy(BasePolicy):
         self._current_episode_idx = idx
 
     def get_payload(self, obs, task_instruction, gen_config):
-        s = np.asarray(obs["states"]).flatten()
-        states = np.concatenate([s, np.zeros(32)])[:32]
+        s = np.asarray(obs["states"], dtype=np.float32).flatten()
+        # Online GenieSim G2 state is [14 arm joints, 2 grippers, 5 waist joints].
+        # The openpi G2A config was trained from LeRobot full-state layout and selects
+        # [0:16] plus [30:44], so fill the fields it expects and leave unavailable EEF
+        # state entries as zeros.
+        states = np.zeros(44, dtype=np.float32)
+        if s.shape[0] >= 16:
+            states[0:2] = s[14:16]
+            states[30:44] = s[0:14]
+        else:
+            states[: min(s.shape[0], states.shape[0])] = s[: states.shape[0]]
 
         eef = obs["eef"]
         left_eef = np.asarray(eef["left"], dtype=np.float64)
@@ -121,7 +130,12 @@ class PiPolicy(BasePolicy):
     def infer(self, payload):
         try:
             result = self.policy.infer(payload)
-            actions = result["actions"]
+            actions = np.asarray(result["actions"], dtype=np.float32)
+            if actions.ndim == 2 and actions.shape[-1] >= 30:
+                geniesim_actions = np.zeros((actions.shape[0], 16), dtype=np.float32)
+                geniesim_actions[:, 0:14] = actions[:, 16:30]
+                geniesim_actions[:, 14:16] = actions[:, 0:2]
+                actions = geniesim_actions
             n = max(len(actions), 1)
             self.action_buffer = deque(actions, maxlen=n)
             return True
